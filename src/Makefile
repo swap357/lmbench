@@ -58,7 +58,7 @@ SAMPLES=lmbench/Results/aix/rs6000 lmbench/Results/hpux/snake \
 	lmbench/Results/irix/indigo2 lmbench/Results/linux/pentium \
 	lmbench/Results/osf1/alpha lmbench/Results/solaris/ss20* 
 
-COMPILE=$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS)
+COMPILE=$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) $(LDLIBS)
 
 INCS =	bench.h lib_mem.h lib_tcp.h lib_udp.h stats.h timing.h
 
@@ -93,26 +93,14 @@ ASMS =  $O/bw_file_rd.s $O/bw_mem.s $O/bw_mmap_rd.s $O/bw_pipe.s 	\
 	$O/rhttp.s $O/timing_o.s $O/tlb.s $O/stream.s			\
 	$O/cache.s $O/lat_dram_page.s $O/lat_pmake.s $O/lat_rand.s	\
 	$O/lat_usleep.s $O/lat_cmd.s
-EXES =	$O/bw_file_rd $O/bw_mem $O/bw_mmap_rd $O/bw_pipe $O/bw_tcp 	\
-	$O/bw_unix $O/hello						\
-	$O/lat_select $O/lat_pipe $O/lat_rpc $O/lat_syscall $O/lat_tcp	\
-	$O/lat_udp $O/lat_mmap $O/mhz $O/lat_proc $O/lat_pagefault	\
-	$O/lat_connect $O/lat_fs $O/lat_sig $O/lat_mem_rd $O/lat_ctx	\
-	$O/lat_sem 							\
-	$O/memsize $O/lat_unix $O/lmdd $O/timing_o $O/enough		\
-	$O/msleep $O/loop_o $O/lat_fifo $O/lmhttp $O/lat_http		\
-	$O/lat_fcntl $O/disk $O/lat_unix_connect $O/flushdisk		\
-	$O/lat_ops $O/line $O/tlb $O/par_mem $O/par_ops 		\
-	$O/stream
-OPT_EXES=$O/cache $O/lat_dram_page $O/lat_pmake $O/lat_rand 		\
-	$O/lat_usleep $O/lat_cmd
-LIBOBJS= $O/lib_tcp.o $O/lib_udp.o $O/lib_unix.o $O/lib_timing.o 	\
-	$O/lib_mem.o $O/lib_stats.o $O/lib_debug.o $O/getopt.o		\
-	$O/lib_sched.o
+EXES = $O/bw_mem $O/lat_mem_rd $O/mhz
+LIBOBJS = $O/lib_timing.o $O/lib_mem.o $O/lib_stats.o $O/lib_debug.o $O/getopt.o $O/lib_sched.o
+
+CFLAGS= -O -DRUSAGE -DHAVE_uint=1 -DHAVE_int64_t=1 -DHAVE_socklen_t -DHAVE_DRAND48 -DHAVE_SCHED_SETAFFINITY=1
 
 lmbench: $(UTILS)
-	@env CFLAGS=-O MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" CC="$(CC)" OS="$(OS)" ../scripts/build all
-	-@env CFLAGS=-O MAKE="$(MAKE)" MAKEFLAGS="-k $(MAKEFLAGS)" CC="$(CC)" OS="$(OS)" ../scripts/build opt
+	@env CFLAGS="-O -DRUSAGE -DHAVE_uint=1 -DHAVE_int64_t=1 -DHAVE_socklen_t -DHAVE_DRAND48 -DHAVE_SCHED_SETAFFINITY=1" MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" CC="$(CC)" OS="$(OS)" ../scripts/build all
+	-@env CFLAGS="-O -DRUSAGE -DHAVE_uint=1 -DHAVE_int64_t=1 -DHAVE_socklen_t -DHAVE_DRAND48 -DHAVE_SCHED_SETAFFINITY=1" MAKE="$(MAKE)" MAKEFLAGS="k$(MAKEFLAGS)" CC="$(CC)" OS="$(OS)" ../scripts/build opt
 
 results: lmbench
 	@env OS="${OS}" ../scripts/config-run
@@ -151,69 +139,49 @@ install-target:
 
 # No special handling for all these
 all: $(EXES) $O/lmbench
-opt: $(OPT_EXES)
+opt: $(EXES)
 asm: $(ASMS)
 $(ASMS):
 	$(CC) -S $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ `basename $@ .s`.c
 
 Wall:
-	@env CFLAGS="-Wall -ansi" MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" CC="${CC}" OS="${OS}" ../scripts/build all opt
+	@env CFLAGS="-g -O -Wall" MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" CC="${CC}" OS="${OS}" ../scripts/build all opt
 
 debug:
-	@env CFLAGS="-g -O" MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" CC="${CC}" OS="${OS}" ../scripts/build all opt
+	@env CFLAGS="-g -O -DDEBUG" MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" CC="${CC}" OS="${OS}" ../scripts/build all opt
 
 assembler:
 	@env CFLAGS=-O MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" CC="${CC}" OS="${OS}" ../scripts/build asm
 
-bk.ver: ../SCCS/s.ChangeSet
-	rm -f bk.ver
-	-echo `bk prs -hr+ -d'$$if(:SYMBOL:){:SYMBOL: }:UTC:' ../ChangeSet;` > bk.ver
-	touch bk.ver
 
-dist: bk.ver
-	@if [ "X`cd ..; bk sfiles -c`" != "X" ]; then \
-		echo "modified files!"; \
-		false; \
-	 fi
-	@if [ "X`cd ..; bk pending`" != "X" ]; then \
-		echo "pending changes!"; \
-		false; \
-	 fi
-	cd ..; \
-		SRCDIR=`pwd`; \
-		DIR=`basename $${SRCDIR}`; \
-		VERSION=`cat src/bk.ver| awk '{print $$1;}' | sed -e 's/Version-//g'`; \
-		cd ..; \
-		bk clone $${DIR} /tmp/lmbench-$${VERSION}; \
-		cd /tmp/lmbench-$${VERSION}; \
-		bk sfiles | xargs touch; \
-		sleep 5; \
-		bk get -s; \
-		for d in doc results scripts src; do \
-			cd $$d; bk get -s; cd ..; \
-		done; \
-		bk sfiles -U -g | xargs touch; \
-		cd src; \
-		make bk.ver; \
-		cd /tmp; \
-		tar czf $${SRCDIR}/../lmbench-$${VERSION}.tgz \
-			lmbench-$${VERSION}; \
-		rm -rf /tmp/lmbench-$${VERSION};
+tag:
+	ROOT=`cat ../CVS/Root`; \
+	MODULE=`cat ../CVS/Repository`; \
+	VERSION=`../scripts/version`; \
+	TAG=`echo lmbench_$${VERSION} | sed -e 's/-/_/g' -e 's/\\./_/g'`; \
+	cd .. \
+	&& cvs -d$${ROOT} tag -c "$${TAG}"
 
-get $(SRCS):
-	-get -s $(SRCS)
-
-edit get-e:
-	get -e -s $(SRCS)
+dist: 
+	SRCDIR=`pwd`; \
+	ROOT=`cat ../CVS/Root`; \
+	MODULE=`cat ../CVS/Repository`; \
+	VERSION=`../scripts/version`; \
+	cd /tmp \
+	&& cvs -d$${ROOT} export -Dtomorrow \
+		 -d $${MODULE}-$${VERSION} $${MODULE} \
+	&& chmod +x $${MODULE}-$${VERSION}/scripts/[a-z]* \
+	&& mv $${MODULE}-$${VERSION} lmbench-$${VERSION} \
+	&& tar czf $${SRCDIR}/../../lmbench-$${VERSION}.tgz \
+		lmbench-$${VERSION} \
+	&& rm -rf lmbench-$${VERSION};
 
 clean:
 	/bin/rm -f ../bin/*/CONFIG ../bin/*/*.[oas]
 	/bin/rm -f *.[oas]
-	-bk clean
 
 clobber:
 	/bin/rm -rf ../bin* SHAR
-	-bk clean
 
 shar:
 	cd ../.. && shar lmbench/Results/Makefile $(SAMPLES) lmbench/scripts/* lmbench/src/Makefile lmbench/src/*.[ch] > lmbench/SHAR
@@ -228,9 +196,10 @@ testmake: $(SRCS) $(UTILS) # used by scripts/make to test gmake
 	install install-target dist get edit get-e clean clobber \
 	share depend testmake
 
-$O/lmbench : ../scripts/lmbench bk.ver
+$O/lmbench : ../scripts/lmbench version.h
 	rm -f $O/lmbench
-	sed -e "s/<version>/`cat bk.ver`/g" < ../scripts/lmbench > $O/lmbench
+	VERSION=`../scripts/version`; \
+	sed -e "s/<version>/$${VERSION}/g" < ../scripts/lmbench > $O/lmbench
 	chmod +x $O/lmbench
 
 $O/lmbench.a: $(LIBOBJS)
@@ -505,4 +474,12 @@ $O/lat_rand:  lat_rand.c timing.h stats.h bench.h $O/lmbench.a
 $O/lat_cmd.s:lat_cmd.c timing.h stats.h bench.h
 $O/lat_cmd:  lat_cmd.c timing.h stats.h bench.h $O/lmbench.a
 	$(COMPILE) -o $O/lat_cmd lat_cmd.c $O/lmbench.a $(LDLIBS)
+
+# Modify the pattern rules for object files
+$O/%.o: %.c $(INCS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Modify the pattern rules for executables
+$O/%: %.c $(INCS) $O/lmbench.a
+	$(CC) $(CFLAGS) -o $@ $< $O/lmbench.a $(LDLIBS)
 
